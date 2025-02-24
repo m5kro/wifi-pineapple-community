@@ -1,0 +1,45 @@
+name: Update Modules
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fix .sh files in modules/src
+        run: |
+          # Remove Windows CRLF and add executable permission for all .sh files
+          find modules/src -type f -name "*.sh" -exec sed -i 's/\r$//' {} \; -exec chmod +x {} \;
+
+      - name: Archive subdirectories in modules/src
+        run: |
+          cd modules/src
+          mkdir -p ../build
+          for target in */; do
+            target=${target%/}  # remove trailing slash
+            tar czf "${target}.tar.gz" "$target" && mv "${target}.tar.gz" ../build/
+          done
+
+      - name: Run PHP command regenerate.php
+        working-directory: modules
+        run: php regenerate.php
+
+      - name: Check changes
+        run: git status
+
+      - name: Commit changes if any
+        run: |
+          # Check for changes and commit if present
+          git diff-index --quiet HEAD || (
+            git config user.name "GitHub Actions" &&
+            git config user.email "actions@github.com" &&
+            git add . &&
+            git commit -m "Automated modules build" &&
+            git push
+          )
